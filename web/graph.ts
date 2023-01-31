@@ -416,21 +416,19 @@ class Game extends SquareAABBCollidable {
         this.repaint = true;
         this.life_checker = (ctx:Game, index:number, view:Int32Array) => {
             let sum_on = 0;
-            for(let i = -1; i < 2; i++)
+            for(let i = -1; i <= 1; i++)
             {
                 const row = index + i * ctx.cell_dim[0];
-                for(let j = -1; j < 2; j++)
+                for(let j = -1; j <= 1; j++)
                 {
-                    sum_on += +(view[row + j] == white.color)
+                    sum_on += +(view[row + j] == white.color);
                 }
             }
             sum_on -= +(view[index] == white.color);
             if(view[index] == black.color)
                 return sum_on === 3 ? true : false;
-            else if((view[index] == white.color) && (sum_on === 2 || sum_on === 3))
-                return true;
             else
-                return false;
+                return ((view[index] == white.color) && (sum_on === 2 || sum_on === 3));
         };
     }
     init(width:number, height:number, cell_width:number, cell_height:number):void
@@ -511,30 +509,32 @@ class Game extends SquareAABBCollidable {
         new RGB(46, 204, 113),
         new RGB(245, 146, 65),
         new RGB(51, 204, 0)];
-    async regenerate_curve_view(main_buf:Sprite):Promise<void>
+    async regenerate_curve_view():Promise<void>
     {
+        const main_buf = this.render_buf;
         this.rendering = true;
         this.calc_bounds();
         const target_bounds = new ViewTransformation(1,1,1,1);
         target_bounds.copy(this.target_bounds);
-        //main_buf.ctx.clearRect(0, 0, main_buf.width, main_buf.height);
-        //main_buf.ctx.drawImage(this.main_buf.image, 0, 0);
+        main_buf.ctx.clearRect(0, 0, main_buf.width, main_buf.height);
+        main_buf.ctx.drawImage(this.main_buf.image, 0, 0);
 
         this.calc_bounds();
         if(!keyboardHandler.keysHeld["KeyP"])
         {
-            const view = new Int32Array(main_buf.imageData!.data.buffer);
-            for(let i = 0; i < view.length; i++)
+            const read_view = new Int32Array(this.main_buf.imageData!.data.buffer);
+            const write_view = new Int32Array(main_buf.imageData!.data.buffer);
+            for(let i = 0; i < read_view.length; i++)
             {
-                view[i] = this.life_checker(this, i, view) ? white.color : black.color;
+                write_view[i] = this.life_checker(this, i, read_view) ? white.color : black.color;
             }
         }
         //a bitmap to be manipulated
         main_buf.refreshImage();
         this.rendering = false;
-        //const buf = this.render_buf;
-        //this.render_buf = this.main_buf;
-        //this.main_buf = buf;
+        const buf = this.render_buf;
+        this.render_buf = this.main_buf;
+        this.main_buf = buf;
         this.current_bounds.copy(target_bounds);
     }
     update_touch_pos():void
@@ -743,7 +743,7 @@ class Game extends SquareAABBCollidable {
         {
             this.last_update_time = Date.now();
             this.repaint = false;
-            this.regenerate_curve_view(this.main_buf);
+            this.regenerate_curve_view();
         }
     }
     world_to_screen(point:number[]):number[]

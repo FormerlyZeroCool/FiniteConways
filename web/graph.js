@@ -277,7 +277,7 @@ class ViewTransformation {
 const black = new RGB(0, 0, 0, 255);
 const white = new RGB(255, 255, 255, 255);
 class Game extends SquareAABBCollidable {
-    constructor(multi_touchListener, touchListener, x, y, width, height, cell_dim = [200, 200]) {
+    constructor(multi_touchListener, touchListener, x, y, width, height, cell_dim = [100, 100]) {
         super(x, y, width, height);
         this.last_update_time = Date.now();
         this.updates_per_second = 15;
@@ -290,9 +290,10 @@ class Game extends SquareAABBCollidable {
         state.layouts.push(this.guiManager);
         this.ui_state_manager = new StateManagedUI(state);
         this.touchPos = [multi_touchListener.single_touch_listener.touchPos[0], multi_touchListener.single_touch_listener.touchPos[1]];
-        const whratio = width / (height > 0 ? height : width);
-        this.target_bounds = new ViewTransformation(1 / width, 1 / height * whratio, width / 2, -height / 2);
+        const whratio = 1; //width / (height > 0 ? height : width);
+        this.target_bounds = new ViewTransformation(2 / width, 2 / height * whratio, width / 2, -height / 2);
         this.current_bounds = new ViewTransformation(1, 1 * whratio, width / 2, -height / 2);
+        this.current_bounds.copy(this.target_bounds);
         const rough_dim = getWidth();
         this.background_color = new RGB(0, 0, 0, 0);
         this.cell_dim = [cell_dim[0], cell_dim[1]];
@@ -303,20 +304,21 @@ class Game extends SquareAABBCollidable {
         //this.main_buf.ctx.fillRect(0, 0, this.width, this.height);
         //this.render_buf = this.new_sprite();
         this.repaint = true;
-        this.life_checker = (ctx, index, view) => {
-            let sum_on = 0;
-            for (let i = -1; i <= 1; i++) {
-                const row = index + i * ctx.cell_dim[0];
-                for (let j = -1; j <= 1; j++) {
-                    sum_on += +(view[row + j] == white.color);
-                }
-            }
-            sum_on -= +(view[index] == white.color);
-            if (view[index] == black.color)
-                return sum_on === 3 ? true : false;
-            else
-                return ((view[index] == white.color) && (sum_on === 2 || sum_on === 3));
-        };
+    }
+    life_checker(ctx, index, view) {
+        let sum_on = 0;
+        const row1 = index - this.cell_dim[0] - 1;
+        const row2 = index - 1;
+        const row3 = index + this.cell_dim[0] - 1;
+        sum_on += view[row1];
+        sum_on += view[row1 + 1];
+        sum_on += view[row1 + 2];
+        sum_on += view[row2];
+        sum_on += view[row2 + 2];
+        sum_on += view[row3];
+        sum_on += view[row3 + 1];
+        sum_on += view[row3 + 2];
+        return ((view[index] & +(sum_on == 2)) | +(sum_on == 3)) == 0;
     }
     init(width, height, cell_width, cell_height) {
         const whratio = width / (height > 0 ? height : width);
@@ -376,27 +378,27 @@ class Game extends SquareAABBCollidable {
     }
     async regenerate_curve_view() {
         const main_buf = this.render_buf;
-        this.rendering = true;
-        this.calc_bounds();
-        const target_bounds = new ViewTransformation(1, 1, 1, 1);
-        target_bounds.copy(this.target_bounds);
-        main_buf.ctx.clearRect(0, 0, main_buf.width, main_buf.height);
-        main_buf.ctx.drawImage(this.main_buf.image, 0, 0);
-        this.calc_bounds();
         if (!keyboardHandler.keysHeld["KeyP"]) {
+            this.rendering = true;
+            this.calc_bounds();
+            const target_bounds = new ViewTransformation(1, 1, 1, 1);
+            target_bounds.copy(this.target_bounds);
+            main_buf.ctx.clearRect(0, 0, main_buf.width, main_buf.height);
+            main_buf.ctx.drawImage(this.main_buf.image, 0, 0);
+            this.calc_bounds();
             const read_view = new Int32Array(this.main_buf.imageData.data.buffer);
             const write_view = new Int32Array(main_buf.imageData.data.buffer);
             for (let i = 0; i < read_view.length; i++) {
                 write_view[i] = this.life_checker(this, i, read_view) ? white.color : black.color;
             }
+            //a bitmap to be manipulated
+            this.rendering = false;
+            const buf = this.render_buf;
+            this.render_buf = this.main_buf;
+            this.main_buf = buf;
+            this.current_bounds.copy(target_bounds);
         }
-        //a bitmap to be manipulated
-        main_buf.refreshImage();
-        this.rendering = false;
-        const buf = this.render_buf;
-        this.render_buf = this.main_buf;
-        this.main_buf = buf;
-        this.current_bounds.copy(target_bounds);
+        this.main_buf.refreshImage();
     }
     update_touch_pos() {
         this.touchPos[0] = this.multi_touchListener.single_touch_listener.touchPos[0];
@@ -663,7 +665,7 @@ async function main() {
     let height = getHeight();
     canvas.width = width;
     canvas.height = height;
-    let game = new Game(multi_touch_listener, touchListener, 0, 0, height, width);
+    let game = new Game(multi_touch_listener, touchListener, 0, 0, 100, 100);
     window.game = game;
     let fps_text_width = 0;
     let render_fps = false;
@@ -720,7 +722,7 @@ async function main() {
             height = getHeight();
             canvas.width = width;
             canvas.height = height;
-            game.init(width, height, width, height - 10);
+            game.init(width, height, width, height);
         }
         dt = Date.now() - start;
         time_queue.push(dt);
